@@ -1,4 +1,7 @@
 <h1 align="center">MyMacCleaner</h1>
+<p align="center">
+  <img src="assets/logo.png" width="140" alt="MyMacCleaner logo">
+</p>
 <p align="center"><b>A calm, honest Mac cleaner — scan, understand, then clean. Nothing is removed you didn't approve.</b></p>
 
 <p align="center">
