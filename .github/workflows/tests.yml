@@ -1,0 +1,28 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project MyMacCleaner.xcodeproj -scheme MyMacCleaner \
+            -configuration Debug -derivedDataPath build build
+
+      - name: Test
+        run: |
+          xcodebuild -project MyMacCleaner.xcodeproj -scheme MyMacCleaner \
+            -configuration Debug -derivedDataPath build test

@@ -1,0 +1,50 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @Environment(\.appLanguage) private var language
+    @AppStorage(appLanguageStorageKey) private var storedLanguage: AppLanguage = .system
+
+    var body: some View {
+        Form {
+            Section(L("Language", "언어", for: language)) {
+                Picker(L("App Language", "앱 언어", for: language), selection: $storedLanguage) {
+                    Text(L("System", "시스템 설정 따름", for: language)).tag(AppLanguage.system)
+                    Text("English").tag(AppLanguage.english)
+                    Text("한국어").tag(AppLanguage.korean)
+                }
+                .pickerStyle(.menu)
+                Text(L(
+                    "Changes take effect immediately. A new scan uses the new language for its results.",
+                    "변경 사항은 즉시 적용됩니다. 새로 스캔하면 그 결과부터 새 언어로 표시됩니다.",
+                    for: language
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            Section(L("About", "정보", for: language)) {
+                LabeledContent(L("Version", "버전", for: language), value: "0.1.0")
+            }
+
+            Section(L("Permissions", "권한", for: language)) {
+                Button(L("Open Full Disk Access Settings…", "전체 디스크 접근 권한 설정 열기…", for: language)) {
+                    PermissionManager.openFullDiskAccessSettings()
+                }
+                Text(L(
+                    "MyMacCleaner needs Full Disk Access to see every cache and log file. Nothing is ever deleted without your review.",
+                    "MyMacCleaner가 모든 캐시와 로그 파일을 확인하려면 전체 디스크 접근 권한이 필요합니다. 직접 검토하지 않은 항목은 절대 삭제되지 않습니다.",
+                    for: language
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(L("Settings", "설정", for: language))
+        .frame(maxWidth: 480)
+    }
+}
+
+#Preview {
+    SettingsView()
+}
