@@ -65,6 +65,7 @@ struct RootView: View {
                 DuplicatesView()
             case .settings:
                 SettingsView()
+                    .environment(cleanCoordinator)
             }
         }
     }

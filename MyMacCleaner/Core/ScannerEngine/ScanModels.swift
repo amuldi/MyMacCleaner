@@ -37,22 +37,23 @@ enum CleanCategory: String, CaseIterable, Identifiable, Codable, Sendable {
         case .systemUserCache: return L("System Cache", "시스템 캐시 파일", for: language)
         case .logs: return L("Logs", "로그 파일", for: language)
         case .temporaryFiles: return L("Temporary Files", "임시 파일", for: language)
-        case .developerData: return L("Xcode Files", "Xcode 파일", for: language)
+        case .developerData: return L("Developer Data", "개발자 데이터", for: language)
         case .installerFiles: return L("Installer Files", "설치 파일 (DMG/PKG)", for: language)
         case .trash: return L("Trash", "휴지통", for: language)
         }
     }
 }
 
-/// A finer-grained bucket used only within `.developerData`, so "Xcode Files"
-/// can drill down the same way it does in other cleaner apps (build data,
-/// archives, simulators, device support, each shown as its own group).
+/// A finer-grained bucket used only within `.developerData`, so it can drill
+/// down the same way other cleaner apps do (Xcode build data, archives,
+/// simulators, device support, package manager caches — each its own group).
 enum DeveloperDataKind: String, Sendable {
     case derivedData
     case archives
     case simulators
     case iosDeviceSupport
     case watchosDeviceSupport
+    case packageManagerCache
 
     func displayName(for language: AppLanguage) -> String {
         switch self {
@@ -61,6 +62,7 @@ enum DeveloperDataKind: String, Sendable {
         case .simulators: return L("Simulator Caches", "시뮬레이터 캐시", for: language)
         case .iosDeviceSupport: return L("iOS Device Support", "iOS 기기 지원 파일", for: language)
         case .watchosDeviceSupport: return L("watchOS Device Support", "watchOS 기기 지원 파일", for: language)
+        case .packageManagerCache: return L("Package Manager Caches", "패키지 매니저 캐시", for: language)
         }
     }
 }

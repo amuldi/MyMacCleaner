@@ -46,6 +46,10 @@ final class CleanCoordinator {
 
     var totalFoundBytes: Int64 { items.reduce(0) { $0 + $1.size } }
     var safeBytes: Int64 { items.filter { $0.safety == .safe }.reduce(0) { $0 + $1.size } }
+    /// Found, but not auto-selected — the user decides after reviewing what's
+    /// actually inside (see product spec §14: "Needs Review" is its own
+    /// bucket, distinct from both "Safe to Clean" and disk usage overall).
+    var reviewBytes: Int64 { items.filter { $0.safety == .review }.reduce(0) { $0 + $1.size } }
     var selectedItems: [ScannedItem] { items.filter { selection.contains($0.id) } }
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.size } }
 
@@ -98,14 +102,22 @@ final class CleanCoordinator {
         }
     }
 
-    func isCategoryFullySelected(_ category: CleanCategory) -> Bool {
-        let categoryItems = items.filter { $0.category == category }
-        guard !categoryItems.isEmpty else { return false }
-        return categoryItems.allSatisfy { selection.contains($0.id) }
+    /// Whether none, some, or all of a group are selected — used to show a
+    /// "mixed" checkbox for a category like Developer Data, where the SAFE
+    /// build data is auto-selected but the REVIEW package caches inside the
+    /// same category aren't. A plain on/off checkbox would otherwise look
+    /// fully unchecked even while part of the category counts toward the
+    /// selected total, which reads as a bug rather than a mix.
+    func selectionState(for items: [ScannedItem]) -> SelectionState {
+        guard !items.isEmpty else { return .none }
+        let selectedCount = items.count { selection.contains($0.id) }
+        if selectedCount == 0 { return .none }
+        if selectedCount == items.count { return .all }
+        return .partial
     }
 
-    func isFullySelected(_ items: [ScannedItem]) -> Bool {
-        !items.isEmpty && items.allSatisfy { selection.contains($0.id) }
+    func selectionState(forCategory category: CleanCategory) -> SelectionState {
+        selectionState(for: items.filter { $0.category == category })
     }
 
     /// Moves every selected item to the Trash (or, for items already in the
@@ -156,6 +168,8 @@ final class CleanCoordinator {
         }
     }
 }
+
+enum SelectionState { case none, partial, all }
 
 struct CleanSummary: Equatable {
     let succeededCount: Int

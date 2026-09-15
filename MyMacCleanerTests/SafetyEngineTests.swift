@@ -75,6 +75,30 @@ struct SafetyEngineTests {
         #expect(safety == .review)
     }
 
+    @Test("iOS/watchOS Device Support is SAFE — Xcode re-downloads it")
+    func deviceSupportIsSafe() {
+        let ios = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport/18.0 (22A123)")
+        let (iosSafety, _) = SafetyEngine.evaluate(url: ios, category: .developerData)
+        #expect(iosSafety == .safe)
+
+        let watchos = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Developer/Xcode/watchOS DeviceSupport/10.0 (21S123)")
+        let (watchosSafety, _) = SafetyEngine.evaluate(url: watchos, category: .developerData)
+        #expect(watchosSafety == .safe)
+    }
+
+    @Test("Package manager caches (npm, ~/.cache) are REVIEW — size and re-download cost vary too widely for SAFE")
+    func packageManagerCachesAreReview() {
+        let npm = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".npm/_cacache")
+        let (npmSafety, _) = SafetyEngine.evaluate(url: npm, category: .developerData)
+        #expect(npmSafety == .review)
+
+        let cache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/some-tool")
+        let (cacheSafety, _) = SafetyEngine.evaluate(url: cache, category: .developerData)
+        #expect(cacheSafety == .review)
+    }
+
     @Test("Xcode Archives are REVIEW, never auto-selected")
     func archivesAreReview() {
         let url = FileManager.default.homeDirectoryForCurrentUser

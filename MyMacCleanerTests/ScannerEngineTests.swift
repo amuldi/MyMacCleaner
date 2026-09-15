@@ -169,4 +169,46 @@ struct ScannerEngineTests {
         #expect(found.count == 1)
         #expect(found.first?.subcategory == DeveloperDataKind.derivedData.rawValue)
     }
+
+    @Test("Nested cache-folder search finds known cache names at any depth, never real data")
+    func nestedCacheFolderSearchFindsCachesOnly() async {
+        let root = TestFixtures.makeTemporaryRoot()
+        defer { TestFixtures.removeIfExists(root) }
+        // Directly inside the app folder...
+        TestFixtures.writeFile(at: root.appendingPathComponent("AppA/GPUCache/shader.bin"))
+        // ...one level deeper under a profile folder (Chrome-style)...
+        TestFixtures.writeFile(at: root.appendingPathComponent("AppB/Default/Cache/data.bin"))
+        // ...and real, non-cache data that must never be picked up.
+        TestFixtures.writeFile(at: root.appendingPathComponent("AppA/RealData/secret.txt"))
+        TestFixtures.writeFile(at: root.appendingPathComponent("AppB/Default/Local Storage/state.db"))
+
+        let events = await collectEvents(ScannerEngine().scan(roots: [
+            .init(category: .applicationCache, url: root, nestedCacheFolderNames: FileClassifier.nestedElectronCacheFolderNames),
+        ]))
+        let found = items(in: events)
+
+        #expect(found.count == 2)
+        #expect(Set(found.map(\.url.lastPathComponent)) == ["GPUCache", "Cache"])
+        #expect(!found.contains { $0.url.path.contains("RealData") })
+        #expect(!found.contains { $0.url.path.contains("Local Storage") })
+    }
+
+    @Test("Per-child relative path only reports the fixed cache offset, never sibling data")
+    func perChildRelativePathNeverTouchesSiblingData() async {
+        let root = TestFixtures.makeTemporaryRoot()
+        defer { TestFixtures.removeIfExists(root) }
+        TestFixtures.writeFile(at: root.appendingPathComponent("com.example.app/Data/Library/Caches/x.bin"))
+        TestFixtures.writeFile(at: root.appendingPathComponent("com.example.app/Data/Documents/personal.txt"))
+        // This container has no cache at the expected offset at all.
+        TestFixtures.writeFile(at: root.appendingPathComponent("com.other.app/Data/SomethingElse/file.txt"))
+
+        let events = await collectEvents(ScannerEngine().scan(roots: [
+            .init(category: .applicationCache, url: root, perChildRelativePath: "Data/Library/Caches"),
+        ]))
+        let found = items(in: events)
+
+        #expect(found.count == 1)
+        #expect(found.first?.url.path.hasSuffix("com.example.app/Data/Library/Caches") == true)
+        #expect(!found.contains { $0.url.path.contains("Documents") })
+    }
 }

@@ -51,8 +51,10 @@ Scan → Analyze → Review → Clean
 1. **Scan** — one button, no setup. The scanner walks the known cache/log/build-data locations in the
    background (never on the main thread) and streams results back live.
 2. **Analyze** — every file or folder is run through the Safety Engine and classified.
-3. **Review** — results are grouped by category (and, for Xcode Files, by sub-type — build data, archives,
-   simulators, device support) so you can drill into exactly what's taking up space before deciding.
+3. **Review** — results are grouped by category (and, for Developer Data, by sub-type — build data,
+   archives, simulators, device support, package manager caches) so you can drill into exactly what's
+   taking up space before deciding. The headline splits **Safe to Clean** from **Needs Review**, rather than
+   quoting one combined number that hides how confident the app actually is about each part of it.
 4. **Clean** — selected items move to the Trash. A confirmation screen states the total size and item count
    before anything happens.
 
@@ -60,14 +62,20 @@ Scan → Analyze → Review → Clean
 
 | Category | Where | Default safety |
 |---|---|---|
-| Application Cache | `~/Library/Caches/*` (third-party apps) | SAFE |
+| Application Cache | `~/Library/Caches/*` (third-party apps), plus sandboxed apps' caches under `~/Library/Containers/*/Data/Library/Caches` and `~/Library/Group Containers/*/Library/Caches`, plus Electron/Chromium-style cache folders (`Cache`, `GPUCache`, `Code Cache`, ...) found inside `~/Library/Application Support/<App>` regardless of which app | SAFE |
 | Browser Cache | Safari, Chrome, Firefox, Edge, Brave, Arc, Opera cache folders | SAFE |
 | System Cache | `~/Library/Caches/com.apple.*` (per-user Apple caches: iCloud sync, Spotlight, QuickLook, ...) | SAFE |
-| Logs | `~/Library/Logs` | SAFE |
+| Logs | `~/Library/Logs`, old crash reports in `~/Library/Application Support/CrashReporter` | SAFE |
 | Temporary Files | The user's `$TMPDIR` | SAFE |
-| Xcode Files | DerivedData, Archives, Simulator caches, iOS/watchOS Device Support | SAFE / REVIEW |
+| Developer Data | Xcode DerivedData, Archives, Simulator caches, iOS/watchOS Device Support, and package manager / tool caches (`~/.npm`, `~/.cache` — only whichever of these actually exist) | SAFE / REVIEW |
 | Installer Files | Leftover `.dmg` / `.pkg` in `~/Downloads` | REVIEW |
 | Trash | `~/.Trash` | SAFE (already discarded by the user) |
+
+Xcode build data, Device Support, and browser/app caches regenerate automatically and cheaply, so they're
+SAFE. Package manager and dev-tool caches (`~/.npm`, `~/.cache`) are REVIEW instead, even though they're
+just as "regenerable" in principle — on a machine with a lot of ML/data tooling this bucket can reach tens
+of GB of downloaded models, and re-fetching that is a meaningfully bigger ask than rebuilding a local Xcode
+cache, so the user reviews what's actually inside before removing it rather than it being auto-selected.
 
 Two features scan more broadly, but never auto-delete anything:
 
@@ -77,9 +85,14 @@ Two features scan more broadly, but never auto-delete anything:
   filename alone) in Downloads and Desktop, and lets you pick which single copy to keep.
 
 **Deliberately not implemented:** system-wide caches/logs under root-owned paths (`/Library/Caches`,
-`/var/log`), and "removable space" (unused architecture slices / localizations *inside* app bundles). Both
-would require `sudo` or modifying a signed app bundle — out of scope for what a cleaner app should touch
-without a very explicit, separate opt-in.
+`/var/log`), "removable space" (unused architecture slices / localizations *inside* app bundles), and
+CoreSimulator's actual device data (`~/Library/Developer/CoreSimulator/Devices` — real simulator state, not
+a cache). All three would require `sudo`, modifying a signed app bundle, or risk deleting a simulator still
+in use — out of scope for what a cleaner app should touch without a very explicit, separate opt-in.
+
+A Debug-only **Scan Diagnostics** panel (Settings, debug builds only) re-measures a curated list of
+disk-heavy locations after a scan and reports how much of each was actually accounted for, to make it easy
+to spot the scanner's next blind spot during development.
 
 ## 🛡 The Safety Model
 
@@ -129,10 +142,10 @@ MyMacCleaner/
 ├── Core/
 │   ├── ScannerEngine/     Walks disk locations, streams classified results, cancellable, bounded concurrency
 │   ├── SafetyEngine/      SAFE / REVIEW / PROTECTED classification + the protected-path registry
-│   ├── FileClassifier/    Maps well-known folders to a scan category (and Xcode Files to a subcategory)
+│   ├── FileClassifier/    Maps well-known folders to a scan category (and Developer Data to a subcategory)
 │   ├── DuplicateEngine/   Size → partial hash → full hash duplicate detection
 │   └── PermissionManager/ Turns filesystem errors into user-facing skip reasons — never a crash
-└── Services/       Cross-feature I/O: disk usage, installed apps, the actual move-to-trash step
+└── Services/       Cross-feature I/O: disk usage, installed apps, diagnostics, the actual move-to-trash step
 MyMacCleanerTests/  Swift Testing suites against real temporary files and directories — no mocked filesystem
 ```
 
@@ -174,6 +187,12 @@ xcodebuild -project MyMacCleaner.xcodeproj -scheme MyMacCleaner test
 - Duplicates currently scans a fixed folder set (Downloads, Desktop); no folder picker yet.
 - Application "leftover" detection is heuristic (bundle identifier + display name matching); anything
   ambiguous is left as REVIEW rather than guessed at.
+- Application Support cache detection matches by well-known Chromium/Electron folder *names* (`Cache`,
+  `GPUCache`, ...), not by app identity — an app whose cache doesn't use one of those names (or a genuinely
+  safe-to-remove folder with an unrecognized name, like a one-time installer's leftover scratch directory)
+  stays undetected rather than guessed at.
+- `CoreSimulator/Devices` (real simulator instances, not their cache) is intentionally never scanned; freeing
+  it means deleting unavailable simulators via Xcode itself.
 - No dedicated UI automation (XCUITest) suite yet — UI-level behavior is covered at the view-model/state
   level instead.
 
@@ -182,15 +201,18 @@ xcodebuild -project MyMacCleaner.xcodeproj -scheme MyMacCleaner test
 **Shipped:**
 
 - ✓ Scan → Analyze → Review → Clean, with cancellable, non-blocking background scanning
-- ✓ Category + subcategory drill-down (Xcode Files → build data / archives / simulators / device support)
+- ✓ Category + subcategory drill-down (Developer Data → build data / archives / simulators / device
+  support / package manager caches)
+- ✓ Sandboxed-app and Electron-app cache detection (Containers, Group Containers, Application Support)
 - ✓ Large Files, Applications (with leftover + uninstall), Duplicates (content-verified)
 - ✓ English / Korean localization, switchable at runtime from Settings
+- ✓ Custom app icon
+- ✓ Debug-only Scan Diagnostics panel (coverage gap detection)
 
 **Planned:**
 
 - A folder picker for Duplicates
 - An XCUITest suite for full click-through UI regression coverage
-- A custom app icon
 
 ## 🤝 Contributing
 

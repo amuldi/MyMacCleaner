@@ -156,11 +156,21 @@ struct CleanView: View {
                     .padding([.horizontal, .top], 20)
             }
 
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text(ByteFormat.string(coordinator.safeBytes, language: language))
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                 Text(L("can be safely cleaned", "안전하게 정리할 수 있어요", for: language))
                     .foregroundStyle(.secondary)
+                if coordinator.reviewBytes > 0 {
+                    Text(L(
+                        "+ \(ByteFormat.string(coordinator.reviewBytes, language: language)) needs your review",
+                        "+ \(ByteFormat.string(coordinator.reviewBytes, language: language))는 검토가 필요해요",
+                        for: language
+                    ))
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .padding(.top, 2)
+                }
             }
             .padding(.vertical, 24)
 
@@ -212,7 +222,7 @@ private struct CategorySection: View {
 
     private var totalSize: Int64 { items.reduce(0) { $0 + $1.size } }
 
-    /// Groups with a subcategory (currently only Xcode Files) get one more
+    /// Groups with a subcategory (currently only Developer Data) get one more
     /// level of drill-down — e.g. "iOS Device Support" as its own disclosure
     /// full of the individual device folders — instead of a flat file list.
     private var hasSubgroups: Bool { items.contains { $0.subcategory != nil } }
@@ -236,13 +246,10 @@ private struct CategorySection: View {
             }
         } label: {
             HStack {
-                Toggle(isOn: Binding(
-                    get: { coordinator.isCategoryFullySelected(category) },
-                    set: { coordinator.setSelected($0, forCategory: category) }
-                )) {
-                    Label(category.displayName(for: language), systemImage: category.systemImage)
+                TriStateCheckboxView(state: coordinator.selectionState(forCategory: category)) { selected in
+                    coordinator.setSelected(selected, forCategory: category)
                 }
-                .toggleStyle(.checkbox)
+                Label(category.displayName(for: language), systemImage: category.systemImage)
                 Spacer()
                 Text(ByteFormat.string(totalSize, language: language))
                     .foregroundStyle(.secondary)
@@ -252,7 +259,7 @@ private struct CategorySection: View {
 }
 
 /// The extra drill-down level inside a category — e.g. "iOS Device Support"
-/// inside "Xcode Files" — with its own select-all checkbox and size total.
+/// inside "Developer Data" — with its own select-all checkbox and size total.
 private struct SubcategorySection: View {
     @Environment(CleanCoordinator.self) private var coordinator
     @Environment(\.appLanguage) private var language
@@ -272,13 +279,10 @@ private struct SubcategorySection: View {
             }
         } label: {
             HStack {
-                Toggle(isOn: Binding(
-                    get: { coordinator.isFullySelected(items) },
-                    set: { coordinator.setSelected($0, for: items) }
-                )) {
-                    Text(title)
+                TriStateCheckboxView(state: coordinator.selectionState(for: items)) { selected in
+                    coordinator.setSelected(selected, for: items)
                 }
-                .toggleStyle(.checkbox)
+                Text(title)
                 Spacer()
                 Text(ByteFormat.string(totalSize, language: language))
                     .font(.callout)

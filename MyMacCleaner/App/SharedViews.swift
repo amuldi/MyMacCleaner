@@ -77,6 +77,33 @@ struct PermissionBannerView: View {
     }
 }
 
+/// A "select all" checkbox that can also show a mixed/partial state — for a
+/// group like Developer Data, where the SAFE items are auto-selected but
+/// REVIEW items in the same group aren't, a plain on/off checkbox would look
+/// fully unchecked even though part of the group counts toward the total.
+struct TriStateCheckboxView: View {
+    let state: SelectionState
+    let action: (Bool) -> Void
+
+    var body: some View {
+        Button {
+            action(state != .all)
+        } label: {
+            Image(systemName: iconName)
+                .foregroundStyle(state == .none ? Color.secondary : Color.accentColor)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var iconName: String {
+        switch state {
+        case .all: return "checkmark.square.fill"
+        case .partial: return "minus.square.fill"
+        case .none: return "square"
+        }
+    }
+}
+
 /// Reusable "why can I remove this?" disclosure used across item detail rows.
 struct ReasonDisclosureView: View {
     @Environment(\.appLanguage) private var language

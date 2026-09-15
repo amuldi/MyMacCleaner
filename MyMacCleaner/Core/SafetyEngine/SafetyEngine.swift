@@ -94,6 +94,25 @@ enum SafetyEngine {
                 for: language
             ))
         }
+        if path.contains("/Developer/Xcode/iOS DeviceSupport/") || path.contains("/Developer/Xcode/watchOS DeviceSupport/") {
+            return (.safe, L(
+                "This is symbol data for a specific OS version. Xcode re-downloads it automatically the next time you debug on a device running that version.",
+                "특정 OS 버전을 위한 심볼 데이터입니다. 해당 버전의 기기로 디버깅할 때 Xcode가 자동으로 다시 내려받습니다.",
+                for: language
+            ))
+        }
+        if path.contains("/.npm/") || path.contains("/.cache/") {
+            // Unlike DerivedData or Device Support, this bucket can hold
+            // anything from a small npm package cache to tens of GB of
+            // downloaded ML models — regeneration cost varies too widely to
+            // call it uniformly SAFE, so the user reviews what's actually
+            // inside before removing it.
+            return (.review, L(
+                "This is a package manager or developer tool cache. It's regenerated automatically when needed, but some tools may need to re-download a large amount of data — review what's inside before removing.",
+                "패키지 매니저 또는 개발 도구의 캐시입니다. 필요할 때 자동으로 다시 생성되지만, 일부 도구는 많은 양의 데이터를 다시 내려받아야 할 수 있으니 안에 무엇이 있는지 확인 후 삭제하세요.",
+                for: language
+            ))
+        }
         return (.review, L(
             "This is developer tool data. Review it yourself before removing, in case a tool still needs it.",
             "개발 도구가 사용하는 데이터입니다. 아직 필요할 수도 있으니 삭제 전에 직접 확인하세요.",

@@ -57,8 +57,17 @@ actor ScannerEngine {
 
             let groupURLs: [URL]
             do {
-                groupURLs = try Self.groupedChildURLs(of: root.url, depth: root.groupDepth)
-                    .filter { root.nameFilter($0.lastPathComponent) }
+                if let relativePath = root.perChildRelativePath {
+                    groupURLs = try Self.perChildURLs(of: root.url, relativePath: relativePath)
+                } else if let cacheNames = root.nestedCacheFolderNames {
+                    groupURLs = try Self.nestedCacheFolderURLs(
+                        of: root.url, matching: cacheNames,
+                        maxDepth: root.nestedSearchMaxDepth, nameFilter: root.nameFilter
+                    )
+                } else {
+                    groupURLs = try Self.groupedChildURLs(of: root.url, depth: root.groupDepth)
+                        .filter { root.nameFilter($0.lastPathComponent) }
+                }
             } catch {
                 continuation.yield(.rootSkipped(url: root.url, reason: PermissionManager.classify(error: error, url: root.url)))
                 continue
@@ -161,5 +170,63 @@ actor ScannerEngine {
             level = next
         }
         return level
+    }
+
+    /// For each immediate child of `root` (one per sandboxed app container),
+    /// returns `child/relativePath` if it actually exists. Used for caches
+    /// that live at a fixed offset inside every container, e.g.
+    /// `~/Library/Containers/<bundle-id>/Data/Library/Caches`.
+    private static func perChildURLs(of root: URL, relativePath: String) throws -> [URL] {
+        let fileManager = FileManager.default
+        let children = try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        return children.compactMap { child in
+            let candidate = child.appendingPathComponent(relativePath, isDirectory: true)
+            return fileManager.fileExists(atPath: candidate.path) ? candidate : nil
+        }
+    }
+
+    /// For each immediate child of `root` that passes `nameFilter` (one per
+    /// app), searches up to `maxDepth` levels inside it for subfolders whose
+    /// name is in `names`, without recursing further into a match once
+    /// found. Used to find well-known cache folder names (`GPUCache`, ...)
+    /// wherever an app happens to nest them, without hardcoding which app.
+    /// An app folder that can't be read is skipped, not fatal to the scan.
+    private static func nestedCacheFolderURLs(
+        of root: URL, matching names: Set<String>, maxDepth: Int, nameFilter: @Sendable (String) -> Bool
+    ) throws -> [URL] {
+        let fileManager = FileManager.default
+        let topLevelChildren = try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { nameFilter($0.lastPathComponent) }
+
+        var results: [URL] = []
+        for appFolder in topLevelChildren {
+            results.append(contentsOf: searchForNamedFolders(under: appFolder, matching: names, remainingDepth: maxDepth, fileManager: fileManager))
+        }
+        return results
+    }
+
+    private static func searchForNamedFolders(
+        under url: URL, matching names: Set<String>, remainingDepth: Int, fileManager: FileManager
+    ) -> [URL] {
+        guard remainingDepth > 0 else { return [] }
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+        guard let children = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: Array(keys)) else {
+            return [] // unreadable folder — skip it silently, never fail the whole scan for this.
+        }
+
+        var results: [URL] = []
+        for child in children {
+            guard let values = try? child.resourceValues(forKeys: keys),
+                  values.isSymbolicLink != true, values.isDirectory == true else { continue }
+
+            if names.contains(child.lastPathComponent) {
+                results.append(child) // a match — its own contents aren't searched further.
+            } else {
+                results.append(contentsOf: searchForNamedFolders(
+                    under: child, matching: names, remainingDepth: remainingDepth - 1, fileManager: fileManager
+                ))
+            }
+        }
+        return results
     }
 }
